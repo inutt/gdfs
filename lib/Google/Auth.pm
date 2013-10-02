@@ -21,11 +21,17 @@ my @fields = qw/access_token token_type client_id client_secret expires_at refre
 sub new
 {
 	my $class = shift;
-	my $config_file = shift // $ENV{'HOME'}."/.google_auth";
+	my %options = @_; # $config_file, @scope
+
+	my $scope_base_url = 'https://www.googleapis.com/auth/',
+
+	push @{$options{'scope'}},'userinfo.profile','userinfo.email'; # Add the basic user info scopes by default
+	foreach (@{$options{'scope'}}) { $_ = $scope_base_url.$_; };
 
 	my $this = {
-		config_file => $config_file,
+		config_file => $options{'config_file'} // $ENV{'HOME'}."/.google_auth",
 		cfg => {},
+		scopes => $options{'scope'},
 	};
 	bless $this,$class;
 
@@ -83,12 +89,12 @@ sub auth
 	elsif (defined($this->refresh_token))
 	{
 		# Access token not available or expired, but refresh token available -> refresh the access token
-		$this->refresh_token();
+		$this->refresh_access_token();
 	}
 	else
 	{
 		# No valid access token or refresh token -> do initial authorisation stuff
-		$this->get_token();
+		$this->get_initial_tokens();
 	};
 };
 
@@ -102,11 +108,7 @@ sub get_initial_tokens
 		client_id => '1002753445009.apps.googleusercontent.com',
 		redirect_uri => 'urn:ietf:wg:oauth:2.0:oob',
 		access_type => 'offline',
-		scope => join(" ",
-					'https://www.googleapis.com/auth/drive',
-					'https://www.googleapis.com/auth/userinfo.profile',
-					'https://www.googleapis.com/auth/userinfo.email',
-				),
+		scope => join(" ",@{$this->{'scopes'}}),
 	);
 
 	my @params;
@@ -134,7 +136,7 @@ sub get_initial_tokens
 			code => $code,
 			client_id => $this->client_id,
 			client_secret => $this->client_secret,
-		redirect_uri => 'urn:ietf:wg:oauth:2.0:oob',
+			redirect_uri => 'urn:ietf:wg:oauth:2.0:oob',
 			grant_type => 'authorization_code',
 		},
 	);
