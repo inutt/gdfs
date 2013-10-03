@@ -30,7 +30,7 @@ sub new
 
 sub debug:lvalue { my $this = shift; return $this->{'debug'}; };
 
-sub request
+sub request_raw
 {
 	my $this = shift;
 	my $url = shift || return undef;
@@ -42,6 +42,14 @@ sub request
 	# Assemble the query parameters (if supplied)
 	$params{'prettyPrint'} = 'false'; # Disable pretty printing to reduce response size
 	my @params;
+	my $range_header;
+	if (exists $params{'_range_header'})
+	{
+		# Used for partial file gets
+		$range_header = $params{'_range_header'};
+		delete $params{'_range_header'};
+	};
+	# Arrange parameters into a query string
 	foreach my $key (keys %params)
 	{
 		push @params, $key."=".uri_escape($params{$key});
@@ -53,20 +61,29 @@ sub request
 	# Make the request
 	# TODO: Check the LWP object accepts gzip compression
 	my $request = HTTP::Request->new(
-		GET => $this->{'api_base_url'}.$url,
+		GET => $url,
 		HTTP::Headers->new(Authorization => $this->{'auth'}->token_type.' '.$this->{'auth'}->access_token)
 	);
+	$request->header(Range => 'bytes='.$range_header) if $range_header;
 
 	my $response = $this->{'lwp'}->request($request);
 
 	if ($response->is_success())
 	{
-		return decode_json $response->decoded_content();
+		return $response->decoded_content();
 	}
 	else
 	{
 		croak "API request failed: ".decode_json($response->decoded_content)->{'error'}->{'message'};
 	};
+};
+
+sub request
+{
+	my $this = shift;
+	my $url = shift || return undef;
+	my %params = @_;
+	return decode_json $this->request_raw($this->{'api_base_url'}.$url,%params);
 };
 
 1;
