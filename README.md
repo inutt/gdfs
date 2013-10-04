@@ -10,3 +10,15 @@ they said that with still no progress.
 
 It's very much a work in progress so I don't recommend anybody attempts
 to use it yet, but someday it might be useful :-)
+
+
+Usage
+-----
+
+Mount with:
+
+	gdfs /path/to/mountpoint
+
+Unmount with:
+
+	fusermount -u /path/to/mountpoint
