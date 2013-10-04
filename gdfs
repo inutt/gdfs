@@ -1,0 +1,91 @@
+#!/usr/bin/perl
+
+use common::sense;
+use FindBin;
+use lib $FindBin::Bin."/lib";
+use Google::API::Drive;
+use Fuse;
+use POSIX qw/ENOENT EISDIR EINVAL O_WRONLY/;
+use Date::Parse qw/str2time/;
+
+
+my $mountpoint = $ARGV[0];
+die "Mountpoint '".$mountpoint."' does not exist" if !-d $mountpoint;
+
+my $drive = Google::API::Drive->new();
+fork and exit;
+
+Fuse::main(
+	mountpoint => $mountpoint,
+	mountopts => 'fsname=gdfs:'.$drive->user_email(),
+	getdir => \&getdir,
+	getattr => \&getattr,
+	statfs => \&statfs,
+	read => \&read,
+	debug => 1,
+);
+
+sub statfs
+{
+	my ($total, $used, $free) = $drive->quota('b');
+	return (4096, 0,0, $total/4096, $free/4096, 4096);
+};
+
+sub getdir
+{
+	my $path = shift;
+	my $id = $drive->path_to_id($path) || return -ENOENT();
+
+	my @names = ();
+	foreach ($drive->get_child_ids($id))
+	{
+		my $file = $drive->get_metadata_for_id($_);
+		push @names, $file->{'title'};
+	};
+
+	unshift @names, '.', '..';
+	push @names, 0; # Indicate the end of the list to fuse
+	return @names,
+};
+
+sub getattr
+{
+	my $filename = shift;
+	my $id = $drive->path_to_id($filename) || return -ENOENT();
+	my $context = Fuse::fuse_get_context();
+
+	my $file = $drive->get_metadata_for_id($id);
+	$file->{'fileSize'} = 4096 if $file->{'mimeType'} eq 'application/vnd.google-apps.folder'; # For a dir
+
+	my $permissions = 0100600; # For a file
+	$permissions =     040700 if $file->{'mimeType'} eq 'application/vnd.google-apps.folder'; # For a dir
+
+	my $last_access = str2time($file->{'lastViewedByMeDate'} // $file->{'modifiedDate'});
+	my $last_modified = str2time($file->{'modifiedDate'});
+
+	return (
+		0,							# Device number of filesystem
+		0,							# Inode number
+		$permissions,				# File mode (type and permission)
+		1,							# Number of hard links
+		$context->{'uid'},			# Numeric UID
+		$context->{'gid'},			# Numeric GID
+		0,							# Device identifier (special files only)
+		$file->{'fileSize'} // 0,	# File size in bytes
+		$last_access,				# Last access time
+		$last_modified,				# Last modification time
+		$last_modified,				# Last inode change time (not create time)
+		4096,						# Preferred block size for filesystem IO
+		1,							# Actual number of blocks allocated
+	);
+};
+
+sub read
+{
+	my $filename = shift;
+	my $requested_size = shift;
+	my $offset = shift;
+
+	my $id = $drive->path_to_id($filename) || return -ENOENT();
+	return $drive->get_file_contents($id, $requested_size, $offset);
+};
