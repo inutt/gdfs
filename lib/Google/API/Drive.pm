@@ -4,6 +4,8 @@ package Google::API::Drive;
 
 use common::sense;
 use Carp;
+use File::Slurp;
+use JSON;
 
 use base 'Google::API';
 
@@ -53,7 +55,12 @@ sub get_metadata_for_id
 	my $this = shift;
 	my $id = shift || return undef;
 
-	return $this->request('drive/v2/files/'.$id);
+	my $metadata = $this->request('drive/v2/files/'.$id, fields => 'id,title,mimeType,fileSize,parents,modifiedDate,lastViewedByMeDate,downloadUrl');
+
+	# The API returns parents as objects, but it's easier to simplify it to just their IDs
+	$metadata->{'parents'} = [ split / /,$metadata->{'parents'} ];
+
+	return $metadata;
 };
 
 sub get_child_ids
@@ -122,7 +129,7 @@ sub download_url
 	# Find the correct url to obtain an exported version of a google native file
 	#TODO: Check for folders since they're not downloadable
 	#TODO: Implement this.
-	carp "Downloading google native formats is not implemented yet";
+	carp "Downloading google native formats is not implemented yet (".$file->{'title'}.")";
 	return undef;
 };
 
