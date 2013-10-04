@@ -6,6 +6,7 @@ use common::sense;
 use Carp;
 use File::Slurp;
 use JSON;
+use Google::DriveCache;
 
 use base 'Google::API';
 
@@ -21,10 +22,14 @@ sub new
 	$this->{'user_email'} = $this->request('oauth2/v2/userinfo', fields=>'email')->{'email'};
 	$this->{'root_folder_id'} = $this->request('drive/v2/about', fields=>'rootFolderId')->{'rootFolderId'};
 
+	# Set up the local cache
+	$this->{'cache'} = Google::DriveCache->new(%options);
+
 	return $this;
 };
 
 sub user_email { my $this = shift; return $this->{'user_email'}; };
+sub cache { my $this = shift; return $this->{'cache'}; };
 
 sub quota
 {
@@ -54,8 +59,17 @@ sub get_metadata_for_id
 {
 	my $this = shift;
 	my $id = shift || return undef;
+	my %options = @_;
 
-	my $metadata = $this->request('drive/v2/files/'.$id, fields => 'id,title,mimeType,fileSize,parents,modifiedDate,lastViewedByMeDate,downloadUrl');
+	my $metadata = $this->cache->get_metadata($id); # Get the metadata from the local cache
+
+	if (!$options{'uncached'} && !$metadata) # If uncached version requested, or metadata isn't in the cache
+	{
+		# Get the metdata from Google
+		$metadata = $this->request('drive/v2/files/'.$id, fields => 'id,title,mimeType,fileSize,parents,modifiedDate,lastViewedByMeDate,downloadUrl');
+		# ...and cache it
+		$this->cache->set_metadata($metadata);
+	};
 
 	# The API returns parents as objects, but it's easier to simplify it to just their IDs
 	$metadata->{'parents'} = [ split / /,$metadata->{'parents'} ];
@@ -72,15 +86,23 @@ sub get_child_ids
 	#     case, it makes more sense to find objects with the specified ID as a parent.
 	#     (It'll make adding caching a lot easier later)
 
-	my $children = $this->request('drive/v2/files',
-									fields => 'items(id)',
-									q => "'".$parent_id."' in parents"
-								);
-	my @child_ids;
-	foreach my $child (@{$children->{'items'}})
+	# ...and now caching is added :-)
+	my @child_ids = $this->cache->get_child_ids($parent_id); # Attempt to retrieve from the cache
+
+	if (!@child_ids)
 	{
-		push @child_ids, $child->{'id'};
+		# No children in local cache, so check Google.
+		#TODO: Find a way to separate "no children in cache" and "no children"
+		my $children = $this->request('drive/v2/files',
+										fields => 'items(id)',
+										q => "'".$parent_id."' in parents"
+									);
+		foreach my $child (@{$children->{'items'}})
+		{
+			push @child_ids, $child->{'id'};
+		};
 	};
+
 	return @child_ids;
 };
 
@@ -123,7 +145,7 @@ sub download_url
 	# Non-google native files have a downloadUrl, google native formats have an array
 	# of exportLinks for the various formats they can be converted to.
 
-	my $file = $this->get_metadata_for_id($id);
+	my $file = $this->get_metadata_for_id($id,uncached=>1);
 	return $file->{'downloadUrl'} if $file->{'downloadUrl'}; # Normal files are easy
 
 	# Find the correct url to obtain an exported version of a google native file
