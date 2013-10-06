@@ -63,7 +63,7 @@ sub get_metadata_for_id
 
 	my $metadata = $this->cache->get_metadata($id); # Get the metadata from the local cache
 
-	if (!$options{'uncached'} && !$metadata) # If uncached version requested, or metadata isn't in the cache
+	if ($options{'uncached'} || !$metadata) # If uncached version requested, or metadata isn't in the cache
 	{
 		# Get the metdata from Google
 		$metadata = $this->request('drive/v2/files/'.$id, fields => 'id,title,mimeType,fileSize,parents,modifiedDate,lastViewedByMeDate,downloadUrl');
@@ -169,3 +169,5 @@ sub get_file_contents
 
 	return $this->request_raw($this->download_url($id), _range_header => $offset.'-'.($offset+$requested_size));
 };
+
+1;

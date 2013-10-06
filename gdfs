@@ -12,7 +12,7 @@ use Date::Parse qw/str2time/;
 my $mountpoint = $ARGV[0];
 die "Mountpoint '".$mountpoint."' does not exist" if !-d $mountpoint;
 
-my $drive = Google::API::Drive->new();
+my $drive = Google::API::Drive->new(debug=>1);
 fork and exit;
 
 Fuse::main(
@@ -22,7 +22,7 @@ Fuse::main(
 	getattr => \&getattr,
 	statfs => \&statfs,
 	read => \&read,
-	debug => 1,
+	debug => 0,
 );
 
 sub statfs
@@ -87,5 +87,10 @@ sub read
 	my $offset = shift;
 
 	my $id = $drive->path_to_id($filename) || return -ENOENT();
-	return $drive->get_file_contents($id, $requested_size, $offset);
+	# NB: We return subtract one from the requested size here, but I don't know why.
+	#     Without it, binary files return one byte more than Fuse wants. With it, the
+	#     size matches the one Fuse expects, and the files seem to match the original
+	#     contents (for both text and binary files).
+	#TODO: Find out why this is!
+	return $drive->get_file_contents($id, $requested_size-1, $offset);
 };

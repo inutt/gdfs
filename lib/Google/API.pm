@@ -56,7 +56,7 @@ sub request_raw
 	};
 	$url .= "?" . join('&',@params) if @params;
 
-	print STDERR "Requesting ".$this->{'api_base_url'}.$url."\n" if $this->debug;
+	print STDERR "Requesting ".$url."\n" if $this->debug;
 
 	# Make the request
 	# TODO: Check the LWP object accepts gzip compression
