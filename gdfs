@@ -5,7 +5,7 @@ use FindBin;
 use lib $FindBin::Bin."/lib";
 use Google::API::Drive;
 use Fuse;
-use POSIX qw/ENOENT EISDIR EINVAL O_WRONLY/;
+use POSIX qw/ENOENT EISDIR EINVAL EOPNOTSUPP O_WRONLY/;
 use Date::Parse qw/str2time/;
 
 
@@ -21,8 +21,13 @@ Fuse::main(
 	getdir => \&getdir,
 	getattr => \&getattr,
 	statfs => \&statfs,
-	read => \&read,
-	debug => 0,
+	read => \&file_read,
+	create => \&file_create,
+	open => sub { return 0 },
+	truncate => sub { return 0 },
+	setxattr => sub{ return -EOPNOTSUPP(); },
+	write => \&file_write,
+	debug => 1,
 );
 
 sub statfs
@@ -80,7 +85,7 @@ sub getattr
 	);
 };
 
-sub read
+sub file_read
 {
 	my $filename = shift;
 	my $requested_size = shift;
@@ -93,4 +98,55 @@ sub read
 	#     contents (for both text and binary files).
 	#TODO: Find out why this is!
 	return $drive->get_file_contents($id, $requested_size-1, $offset);
+};
+
+sub file_create
+{
+	my $filename = shift;
+	# Also supplies create mask, open mode flags
+
+	return file_write($filename,'',0);
+};
+
+sub file_write
+{
+	# Returns number of bytes sucessfully written
+
+	my $filename = shift;
+	my $new_contents = shift;
+	my $offset = shift;
+
+	print STDERR "\n\n$filename\n\n";
+	my $id = $drive->path_to_id($filename);
+	my $contents;
+	if ($id)
+	{
+		# Since partial upload doesn't seem to be supported, we have to
+		# patch the file locally and re-upload the whole thing.
+		my $metadata = $drive->get_metadata_for_id($id);
+
+		$contents = file_read($filename,$metadata->{'fileSize'},0);
+
+		if (length($new_contents)+$offset < length($contents))
+		{
+			# New content replaces a subset of old content
+			substr($contents, $offset, length($new_contents)) = $new_contents;
+		}
+		else
+		{
+			# New content extends old content (and possibly replaces some too);
+			$contents = substr($contents, 0, $offset);
+			$contents .= $new_contents;
+		};
+	}
+	else
+	{
+		# File doesn't exist, so just put the new contents into it
+		$contents = $new_contents;
+	};
+
+	my $success = $drive->put_file_contents($filename, $contents);
+
+	return length($new_contents) if $success;
+	return 0; # if we didn't write the contents succesfully
 };

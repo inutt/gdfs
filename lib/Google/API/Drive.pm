@@ -170,4 +170,84 @@ sub get_file_contents
 	return $this->request_raw($this->download_url($id), _range_header => $offset.'-'.($offset+$requested_size));
 };
 
+sub put_file_contents
+{
+	my $this = shift;
+	my $path = shift || return undef;
+	my $content = shift;
+
+	my %metadata;
+
+	# Ensure we have a valid access token, one way or another.
+	$this->{'auth'}->auth();
+
+	# Check if the file already exists
+	my $file_id = $this->path_to_id($path);
+
+	my @components = split m#/#,$path;
+	my $filename = pop @components;
+	my $path = join '/',@components;
+
+	$metadata{'title'} = $filename;
+	$metadata{'fileSize'} = length($content);
+
+	$metadata{'mimeType'} = "image/png";#TODO: Detect the mime type
+
+	# Determine the parent ID
+	my $parent_id = $this->path_to_id($path) || return undef;
+	$metadata{'parents'} = [ { id => $parent_id } ];
+
+	$metadata{'id'} = $file_id if $file_id;
+
+	my $url = $this->{'api_base_url'}.'upload/drive/v2/files';
+
+	my $method;
+	if ($file_id)
+	{
+		# File exists, so we're replacing the contents
+		print STDERR "Replacing file contents, " if $this->debug;
+		$method = 'PUT';
+		$url .= '/'.$file_id;
+	}
+	else
+	{
+		# File doesn't exist, so create a new one
+		print STDERR "Creating new file, " if $this->debug;
+		$method = 'POST';
+	};
+	$url .= '?uploadType=multipart';
+
+	print STDERR "sending to ".$url."\n" if $this->debug;
+
+
+	# Make the request
+	# TODO: Check the LWP object accepts gzip compression
+	my $request = HTTP::Request->new(
+		$method => $url,
+		HTTP::Headers->new(Authorization => $this->{'auth'}->token_type.' '.$this->{'auth'}->access_token),
+	);
+	$request->add_part(HTTP::Message->new([
+				Content_Type => 'application/json'],
+				encode_json(\%metadata),
+			));
+	$request->add_part(HTTP::Message->new([
+				Content_Type => $metadata{'mimeType'}],
+				$content,
+			));
+
+	my $response = $this->{'lwp'}->request($request);
+
+	if (!$response->is_success())
+	{
+		croak "API request failed: ".decode_json($response->decoded_content)->{'error'}->{'message'};
+	};
+
+	# Cache the metadata for the new/updated file
+	# (Saves a second call to get the metadata we already have, and means that newly created
+	# files exist in the cache, eliminating problems with the create/setattr/write process
+	# of creating a new file)
+	$this->cache->set_metadata(decode_json $response->decoded_content);
+	return 1;
+};
+
 1;
