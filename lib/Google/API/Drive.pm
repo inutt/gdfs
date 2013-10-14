@@ -95,7 +95,7 @@ sub get_child_ids
 		#TODO: Find a way to separate "no children in cache" and "no children"
 		my $children = $this->request('drive/v2/files',
 										fields => 'items(id)',
-										q => "'".$parent_id."' in parents"
+										q => "'".$parent_id."' in parents and trashed = false"
 									);
 		foreach my $child (@{$children->{'items'}})
 		{
@@ -248,6 +248,19 @@ sub put_file_contents
 	# of creating a new file)
 	$this->cache->set_metadata(decode_json $response->decoded_content);
 	return 1;
+};
+
+sub delete_file
+{
+	my $this = shift;
+	my $path = shift || return undef;
+
+
+	my $id = $this->path_to_id($path) || return undef;
+
+	my $response = $this->request('drive/v2/files/'.$id.'/trash', _method=>'POST');
+	$this->cache->del_metadata($id);
+	return $response;
 };
 
 1;

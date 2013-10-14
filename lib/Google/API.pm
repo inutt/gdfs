@@ -50,6 +50,13 @@ sub request_raw
 		$range_header = $params{'_range_header'};
 		delete $params{'_range_header'};
 	};
+	my $method = 'GET';
+	if (exists $params{'_method'})
+	{
+		# Used for partial file gets
+		$method = $params{'_method'};
+		delete $params{'_method'};
+	};
 	# Arrange parameters into a query string
 	foreach my $key (keys %params)
 	{
@@ -62,10 +69,12 @@ sub request_raw
 	# Make the request
 	# TODO: Check the LWP object accepts gzip compression
 	my $request = HTTP::Request->new(
-		GET => $url,
+		$method => $url,
 		HTTP::Headers->new(Authorization => $this->{'auth'}->token_type.' '.$this->{'auth'}->access_token)
 	);
 	$request->header(Range => 'bytes='.$range_header) if $range_header;
+
+	$request->header("Content-length" => 0) if $method eq 'POST';
 
 	my $response = $this->api_request($request);
 
