@@ -235,7 +235,7 @@ sub put_file_contents
 				$content,
 			));
 
-	my $response = $this->{'lwp'}->request($request);
+	my $response = $this->api_request($request);
 
 	if (!$response->is_success())
 	{

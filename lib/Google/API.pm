@@ -8,6 +8,7 @@ use HTTP::Request;
 use HTTP::Headers;
 use URI::Escape;
 use JSON;
+use Time::HiRes qw/usleep/;
 use Carp;
 use Google::Auth;
 
@@ -66,7 +67,7 @@ sub request_raw
 	);
 	$request->header(Range => 'bytes='.$range_header) if $range_header;
 
-	my $response = $this->{'lwp'}->request($request);
+	my $response = $this->api_request($request);
 
 	if ($response->is_success())
 	{
@@ -74,7 +75,8 @@ sub request_raw
 	}
 	else
 	{
-		croak "API request failed: ".decode_json($response->decoded_content)->{'error'}->{'message'};
+		my $error = decode_json($response->decoded_content)->{'error'};
+		croak "API request failed: ".$error->{'code'}." ".$error->{'message'};
 	};
 };
 
@@ -84,6 +86,27 @@ sub request
 	my $url = shift || return undef;
 	my %params = @_;
 	return decode_json $this->request_raw($this->{'api_base_url'}.$url,%params);
+};
+
+sub api_request
+{
+	my $this = shift;
+	my $request = shift || return undef;
+
+	my $response = $this->{'lwp'}->request($request);
+
+	my $counter = 0;
+	while (($response->code == 403 && grep({$_->{'reason'}=~/ratelimitexceeded/i} @{$response->{'error'}->{'errors'}})) || ($response->code == 500))
+	{
+		$counter++;
+		# Rate limit exceeded, or Google internal error, so backoff and try again
+		print "API Request failed, retrying (counter = $counter)\n" if $this->debug;
+		usleep (2**$counter + rand(1))*1000;
+		$response = $this->{'lwp'}->request($request);
+		last if $counter == 5;
+	};
+
+	return $response;
 };
 
 1;
