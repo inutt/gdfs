@@ -6,6 +6,8 @@ use common::sense;
 use Carp;
 use File::Slurp;
 use JSON;
+use IO::Scalar;
+use File::MimeInfo::Magic;
 use Google::DriveCache;
 
 use base 'Google::API';
@@ -191,7 +193,8 @@ sub put_file_contents
 	$metadata{'title'} = $filename;
 	$metadata{'fileSize'} = length($content);
 
-	$metadata{'mimeType'} = "image/png";#TODO: Detect the mime type
+	# Detect the mime type of the content
+	$metadata{'mimeType'} = mimetype(IO::Scalar->new(\$content));
 
 	# Determine the parent ID
 	my $parent_id = $this->path_to_id($path) || return undef;
