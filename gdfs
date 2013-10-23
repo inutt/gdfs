@@ -7,18 +7,25 @@ use Google::API::Drive;
 use Fuse;
 use POSIX qw/ENOENT EISDIR EINVAL EOPNOTSUPP EIO O_WRONLY/;
 use Date::Parse qw/str2time/;
+use Getopt::Abridged;
 
 
-my $mountpoint = $ARGV[0];
-die "Mountpoint '".$mountpoint."' does not exist" if !-d $mountpoint;
+my $options = Getopt::Abridged->new(
+	'd|debug=0',
+	'm|mountpoint=s',
+	-positional => ['mountpoint'],
+)->process(\@ARGV) or exit;
 
-my $drive = Google::API::Drive->new(debug=>1);
-fork and exit;
+die "No mountpoint specified" if !$options->{'mountpoint'};
+die "Mountpoint '".$options->{'mountpoint'}."' does not exist" if !-d $options->{'mountpoint'};
+
+my $drive = Google::API::Drive->new(debug=>$options->{'debug'});
+fork and exit unless $options->{'debug'};
 
 Fuse::main(
-	mountpoint => $mountpoint,
+	mountpoint => $options->{'mountpoint'},
 	mountopts => 'fsname=gdfs:'.$drive->user_email(),
-	debug => 1,
+	debug => $options->{'debug'},
 
 	getdir => \&getdir,
 	getattr => \&getattr,
