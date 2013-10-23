@@ -19,7 +19,11 @@ my $options = Getopt::Abridged->new(
 die "No mountpoint specified" if !$options->{'mountpoint'};
 die "Mountpoint '".$options->{'mountpoint'}."' does not exist" if !-d $options->{'mountpoint'};
 
-my $drive = Google::API::Drive->new(debug=>$options->{'debug'});
+my $drive = Google::API::Drive->new(
+	debug => $options->{'debug'},
+	config_dir => undef, # Defaults to ~/.gdfs
+);
+
 fork and exit unless $options->{'debug'};
 
 Fuse::main(

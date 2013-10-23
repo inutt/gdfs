@@ -11,13 +11,13 @@ sub new
 	my %options = @_;
 
 	my $this = {
-		cache_file => $options{'cache_file'} // $ENV{'HOME'}.'/.google_drive_cache',
+		config_dir => $options{'config_dir'} // $ENV{'HOME'}.'/.gdfs',
 		debug => $options{'debug'},
 	};
 	bless $this,$class;
 
 #	$this->dbh = DBI->connect('dbi:SQLite:dbname=:memory:','','',{RaiseError=>1});
-	$this->{'dbh'} = DBI->connect('dbi:SQLite:dbname='.$this->{'cache_file'},'','',{RaiseError=>1});
+	$this->{'dbh'} = DBI->connect('dbi:SQLite:dbname='. $this->{'config_dir'}.'/metadata.db' ,'','',{RaiseError=>1});
 	$this->{'dbh'}->do("CREATE TABLE IF NOT EXISTS files(id text primary key, title text, mimeType text, fileSize int, parents text, modifiedDate int, lastViewedByMeDate int)");
 
 	$this->{'del_cmd'} = $this->{'dbh'}->prepare("DELETE FROM files WHERE id = ?");

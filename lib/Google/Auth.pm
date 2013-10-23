@@ -9,6 +9,7 @@ use File::Slurp;
 use JSON;
 use LWP::UserAgent;
 use URI::Escape;
+use File::Basename;
 
 # Client identification tokens from the Google API console
 my $client = {
@@ -29,19 +30,22 @@ sub new
 	foreach (@{$options{'scope'}}) { $_ = $scope_base_url.$_; };
 
 	my $this = {
-		config_file => $options{'config_file'} // $ENV{'HOME'}."/.google_auth",
+		config_dir => $options{'config_dir'} // $ENV{'HOME'}."/.gdfs",
 		cfg => {},
 		scopes => $options{'scope'},
 	};
 	bless $this,$class;
 
+	# Check the config dir exists, and create it if not
+	mkdir $this->{'config_dir'} or die "Can't create config dir at ".$this->{'config_dir'} if !-d $this->{'config_dir'};
+	chmod 0700, $this->{'config_dir'};
+
 	foreach (@fields) { $this->{'cfg'}->{$_} = undef; };
 
-	$this->load_config() if -r $this->{'config_file'};
+	$this->load_config() if -r $this->{'config_dir'}."/auth";
 	$this->client_id = $client->{'id'} if !defined $this->client_id;
 	$this->client_secret = $client->{'secret'} if !defined $this->client_secret;
-	$this->save_config() if !-f $this->{'config_file'};
-	chmod 0600, $this->{'config_file'};
+	$this->save_config() if !-f $this->{'config_dir'}."/auth";
 	return $this;
 };
 
@@ -53,7 +57,7 @@ sub load_config
 	my $this = shift;
 	$this->{'cfg'} = 
 	decode_json(
-		scalar read_file($this->{'config_file'})
+		scalar read_file($this->{'config_dir'}."/auth")
 	);
 };
 
@@ -61,7 +65,8 @@ sub save_config
 {
 	my $this = shift;
 	# Should probably use encode_json() here to handle UTG-8 properly, but that doesn't support pretty printing without using it in OO-form
-	write_file( $this->{'config_file'}, to_json($this->{'cfg'},{pretty=>1}) );
+	write_file( $this->{'config_dir'}."/auth", to_json($this->{'cfg'},{pretty=>1}) );
+	chmod 0600, $this->{'config_dir'}."/auth";
 };
 
 # Clever auto-attributes, adapted from http://www.perlmonks.org/?node_id=806486 and lvalue stuff from elsewhere that I forgot the link for
