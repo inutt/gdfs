@@ -60,7 +60,7 @@ sub request_raw
 	# Arrange parameters into a query string
 	foreach my $key (keys %params)
 	{
-		push @params, $key."=".uri_escape($params{$key});
+		push @params, $key."=".uri_escape($params{$key}) if $params{$key};
 	};
 	$url .= "?" . join('&',@params) if @params;
 
@@ -110,7 +110,7 @@ sub api_request
 		$counter++;
 		# Rate limit exceeded, or Google internal error, so backoff and try again
 		print "API Request failed, retrying (counter = $counter)\n" if $this->debug;
-		usleep (2**$counter + rand(1))*1000;
+		usleep((2**$counter + rand(1))*1e6);
 		$response = $this->{'lwp'}->request($request);
 		last if $counter == 5;
 	};

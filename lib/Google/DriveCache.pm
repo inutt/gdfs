@@ -20,11 +20,16 @@ sub new
 #	$this->dbh = DBI->connect('dbi:SQLite:dbname=:memory:','','',{RaiseError=>1});
 	$this->{'dbh'} = DBI->connect('dbi:SQLite:dbname='. $this->{'config_dir'}.'/metadata.db' ,'','',{RaiseError=>1});
 	$this->{'dbh'}->do("CREATE TABLE IF NOT EXISTS files(id text primary key, title text, mimeType text, fileSize int, parents text, modifiedDate int, lastViewedByMeDate int)");
+	$this->{'dbh'}->do("CREATE TABLE IF NOT EXISTS lastchange(id text primary key)");
 
 	$this->{'del_cmd'} = $this->{'dbh'}->prepare("DELETE FROM files WHERE id = ?");
 	$this->{'get_cmd'} = $this->{'dbh'}->prepare("SELECT * FROM files WHERE id = ?");
 	$this->{'set_cmd'} = $this->{'dbh'}->prepare("INSERT INTO files(id, title, mimeType, fileSize, parents, modifiedDate, lastViewedByMeDate) VALUES (?,?,?,?,?,?,?)");
 	$this->{'get_children_cmd'} = $this->{'dbh'}->prepare("SELECT id FROM files WHERE INSTR(parents,?)");
+
+	$this->{'get_last_change'} = $this->{'dbh'}->prepare("SELECT MAX(id) AS id FROM lastchange");
+	$this->{'set_last_change'} = $this->{'dbh'}->prepare("INSERT INTO lastchange (id) VALUES (?)");
+	$this->{'truncate_last_change'} = $this->{'dbh'}->prepare("DELETE FROM lastchange where id < ?");
 
 	mkdir $this->{'config_dir'}.'/cache' or die "Can't create cache dir" if !-d $this->{'config_dir'}.'/cache';
 
@@ -132,6 +137,28 @@ sub keep_cached
 	my $id = shift;
 
 	rename $this->{'config_dir'}.'/cache/'.$id, $this->{'config_dir'}.'/cache/failed-'.time().'-'.$id;
+};
+
+sub get_last_change
+{
+	my $this = shift;
+
+	$this->{'get_last_change'}->execute();
+	return($this->{'get_last_change'}->fetchrow_hashref()->{'id'} // undef);
+};
+
+sub set_last_change
+{
+	my $this = shift;
+	my $id = shift;
+
+	my $existing_id = $this->get_last_change();
+
+	if ($id > $existing_id)
+	{
+		$this->{'set_last_change'}->execute($id);
+		$this->{'truncate_last_change'}->execute($id);
+	};
 };
 
 1;
