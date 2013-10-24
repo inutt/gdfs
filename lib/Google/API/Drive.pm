@@ -220,7 +220,7 @@ sub put_file_contents
 	};
 	$url .= '?uploadType=multipart';
 
-	print STDERR "sending to ".$url."\n" if $this->debug;
+	print STDERR "sending ".length($content)." bytes to ".$url."\n" if $this->debug;
 
 
 	# Make the request
@@ -249,8 +249,9 @@ sub put_file_contents
 	# (Saves a second call to get the metadata we already have, and means that newly created
 	# files exist in the cache, eliminating problems with the create/setattr/write process
 	# of creating a new file)
-	$this->cache->set_metadata(decode_json $response->decoded_content);
-	return 1;
+	my $metadata = decode_json $response->decoded_content;
+	$this->cache->set_metadata($metadata);
+	return $metadata->{'id'};
 };
 
 sub delete_file

@@ -111,7 +111,8 @@ sub file_read
 	#     size matches the one Fuse expects, and the files seem to match the original
 	#     contents (for both text and binary files).
 	#TODO: Find out why this is!
-	return $drive->get_file_contents($id, $requested_size-1, $offset);
+	$requested_size -= 1 if $requested_size;
+	return $drive->get_file_contents($id, $requested_size // undef, $offset // undef);
 };
 
 sub file_create
@@ -138,7 +139,7 @@ sub file_write
 		# patch the file locally and re-upload the whole thing.
 		my $metadata = $drive->get_metadata_for_id($id);
 
-		$contents = ($drive->cache->is_cached($id)) ? $drive->cache->get_cached($id) : file_read($filename,$metadata->{'fileSize'},0);
+		$contents = ($drive->cache->is_cached($id)) ? $drive->cache->get_cached($id) : file_read($filename,$metadata->{'fileSize'});
 
 		if (length($new_contents)+$offset < length($contents))
 		{
@@ -158,14 +159,18 @@ sub file_write
 		$contents = $new_contents;
 	};
 
-	# Temporarily store the contents in the cache if the file exists, or upload if not.
+	# Temporarily store the contents in the cache, creating a new file to get an ID if it
+	# doesn't already exist.
+	#
 	# (NB: Writing works in chunks of 4k, so the first chunk of a new file will be uploaded,
 	#      the second will download the first again, the rest will be cached. Not ideal, but
 	#      much better than writing each chunk as we receive it due to the latency of setting
 	#      up an SSL connection to Google every time)
-	my $success = $id ? $drive->cache->set_cached($id, $contents) : $drive->put_file_contents($filename,$contents);
 
-	return length($new_contents) if $success;
+	$id = $drive->put_file_contents($filename,"") if !$id; # Upload a zero length file to get a new file ID
+	$drive->cache->set_cached($id, $contents) if $id; # $id might be undefined if the file couldn't be created
+
+	return length($new_contents) if $id;
 	return 0; # if we didn't write the contents succesfully
 };
 

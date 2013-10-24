@@ -112,7 +112,7 @@ sub get_cached
 	my $this = shift;
 	my $id = shift;
 
-	return read_file($this->{'config_dir'}.'/cache/'.$id);
+	return scalar(read_file($this->{'config_dir'}.'/cache/'.$id));
 };
 
 sub del_cached
