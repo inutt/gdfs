@@ -13,6 +13,7 @@ use Getopt::Abridged;
 my $options = Getopt::Abridged->new(
 	'd|debug=0',
 	'm|mountpoint=s',
+	'l|label=s',
 	-positional => ['mountpoint'],
 )->process(\@ARGV) or exit;
 
@@ -23,13 +24,16 @@ fork and exit unless $options->{'debug'};
 
 my $drive = Google::API::Drive->new(
 	debug => $options->{'debug'},
+	label => $options->{'label'},
 	config_dir => undef, # Defaults to ~/.gdfs
 );
 
+my $fsname = 'google-drive';
+$fsname .= ":".$drive->label() if $drive->label();
 
 Fuse::main(
 	mountpoint => $options->{'mountpoint'},
-	mountopts => 'fsname=gdfs:'.$drive->user_email(),
+	mountopts => 'fsname='.$fsname.',subtype=gdfs',
 	debug => $options->{'debug'},
 
 	getdir => \&getdir,
@@ -96,7 +100,7 @@ sub getattr
 		$last_modified,				# Last modification time
 		$last_modified,				# Last inode change time (not create time)
 		4096,						# Preferred block size for filesystem IO
-		1,							# Actual number of blocks allocated
+		$file->{'fileSize'} / 512,	# Actual number of (512 byte) blocks allocated
 	);
 };
 

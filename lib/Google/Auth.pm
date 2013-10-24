@@ -24,9 +24,8 @@ sub new
 	my $class = shift;
 	my %options = @_; # $config_file, @scope
 
-	my $scope_base_url = 'https://www.googleapis.com/auth/',
+	my $scope_base_url = 'https://www.googleapis.com/auth/';
 
-	push @{$options{'scope'}},'userinfo.profile','userinfo.email'; # Add the basic user info scopes by default
 	foreach (@{$options{'scope'}}) { $_ = $scope_base_url.$_; };
 
 	my $this = {

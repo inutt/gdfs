@@ -24,10 +24,10 @@ sub new
 	my $this = $class->SUPER::new(%options);
 
 	# Get some useful data and store it
-	$this->{'user_email'} = $this->request('oauth2/v2/userinfo', fields=>'email')->{'email'};
 	$this->{'root_folder_id'} = $this->request('drive/v2/about', fields=>'rootFolderId')->{'rootFolderId'};
 
 	$this->{'poll_interval'} = $options{'poll_interval'} // 60, # seconds
+	$this->{'label'} = $options{'label'} // undef;
 
 	# Set up the local cache
 	$this->{'cache'} = Google::DriveCache->new(%options);
@@ -41,7 +41,7 @@ sub new
 	return $this;
 };
 
-sub user_email { my $this = shift; return $this->{'user_email'}; };
+sub label { my $this = shift; return $this->{'label'}; };
 sub cache { my $this = shift; return $this->{'cache'}; };
 
 sub quota
@@ -329,10 +329,8 @@ sub fork_poller
 			sleep $this->{'poll_interval'};
 			my $ppid = getppid();
 			exit(0) if $ppid == 1; # Exit the polling subprocess if the parent exits and didn't tell us
-			print STDERR "Suspending main process for remote change poll...\n" if $this->debug;
 #			kill 'TSTP',$ppid; # Temporarily suspend the main process to avoid the possibility of both processing updating things simultaneously
 			$this->get_remote_changes();
-			print STDERR "Resuming main process...\n" if $this->debug;
 #			kill 'CONT',$ppid; # Resume the main process
 		};
 	}
