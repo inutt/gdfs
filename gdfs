@@ -40,6 +40,7 @@ Fuse::main(
 	truncate => sub { return 0 },
 	setxattr => sub{ return -EOPNOTSUPP(); },
 	write => \&file_write,
+	release => \&release,
 	unlink => \&unlink,
 );
 
@@ -129,7 +130,6 @@ sub file_write
 	my $new_contents = shift;
 	my $offset = shift;
 
-	print STDERR "\n\n$filename\n\n";
 	my $id = $drive->path_to_id($filename);
 	my $contents;
 	if ($id)
@@ -138,7 +138,7 @@ sub file_write
 		# patch the file locally and re-upload the whole thing.
 		my $metadata = $drive->get_metadata_for_id($id);
 
-		$contents = file_read($filename,$metadata->{'fileSize'},0);
+		$contents = ($drive->cache->is_cached($id)) ? $drive->cache->get_cached($id) : file_read($filename,$metadata->{'fileSize'},0);
 
 		if (length($new_contents)+$offset < length($contents))
 		{
@@ -158,10 +158,35 @@ sub file_write
 		$contents = $new_contents;
 	};
 
-	my $success = $drive->put_file_contents($filename, $contents);
+	# Temporarily store the contents in the cache if the file exists, or upload if not.
+	# (NB: Writing works in chunks of 4k, so the first chunk of a new file will be uploaded,
+	#      the second will download the first again, the rest will be cached. Not ideal, but
+	#      much better than writing each chunk as we receive it due to the latency of setting
+	#      up an SSL connection to Google every time)
+	my $success = $id ? $drive->cache->set_cached($id, $contents) : $drive->put_file_contents($filename,$contents);
 
 	return length($new_contents) if $success;
 	return 0; # if we didn't write the contents succesfully
+};
+
+sub release
+{
+	# Upload the file when it's closed, rather than when written to, to work around the 4k write limits in perl-fuse
+	# (See http://www.linuxquestions.org/questions/programming-9/fuse-programming-in-perl%3B-buffersize-issues-797566/
+	#  and http://perlmonks.org/?node_id=830830 )
+	my $filename = shift;
+
+	my $id = $drive->path_to_id($filename);
+	if ($drive->cache->is_cached($id))
+	{
+		my $success = $drive->put_file_contents($filename, $drive->cache->get_cached($id));
+		$drive->cache->del_cached($id) if $success;
+		$drive->cache->keep_cached($id) if !$success;
+
+		return $success ? 0 : -EIO();
+	};
+
+	return 0; # File wasn't cached, so we don't need to do anything
 };
 
 sub unlink

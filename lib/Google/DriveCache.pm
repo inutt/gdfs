@@ -4,6 +4,7 @@ package Google::DriveCache;
 
 use common::sense;
 use DBI;
+use File::Slurp;
 
 sub new
 {
@@ -24,6 +25,8 @@ sub new
 	$this->{'get_cmd'} = $this->{'dbh'}->prepare("SELECT * FROM files WHERE id = ?");
 	$this->{'set_cmd'} = $this->{'dbh'}->prepare("INSERT INTO files(id, title, mimeType, fileSize, parents, modifiedDate, lastViewedByMeDate) VALUES (?,?,?,?,?,?,?)");
 	$this->{'get_children_cmd'} = $this->{'dbh'}->prepare("SELECT id FROM files WHERE INSTR(parents,?)");
+
+	mkdir $this->{'config_dir'}.'/cache' or die "Can't create cache dir" if !-d $this->{'config_dir'}.'/cache';
 
 	return $this;
 };
@@ -84,6 +87,51 @@ sub set_metadata
 		$options->{'modifiedDate'},
 		$options->{'lastViewedByMeDate'},
 	);
+};
+
+
+sub is_cached
+{
+	my $this = shift;
+	my $id = shift;
+
+	return (-f $this->{'config_dir'}.'/cache/'.$id);
+};
+
+sub set_cached
+{
+	my $this = shift;
+	my $id = shift;
+	my $content = shift;
+
+	write_file($this->{'config_dir'}.'/cache/'.$id, $content);
+};
+
+sub get_cached
+{
+	my $this = shift;
+	my $id = shift;
+
+	return read_file($this->{'config_dir'}.'/cache/'.$id);
+};
+
+sub del_cached
+{
+	my $this = shift;
+	my $id = shift;
+
+	unlink $this->{'config_dir'}.'/cache/'.$id;
+};
+
+sub keep_cached
+{
+	# Intended to keep the updated file in the cache if an upload fails, since the
+	# process that was writing to the file doesn't see the upload and will have
+	# assumed the file was written correctly
+	my $this = shift;
+	my $id = shift;
+
+	rename $this->{'config_dir'}.'/cache/'.$id, $this->{'config_dir'}.'/cache/failed-'.time().'-'.$id;
 };
 
 1;
