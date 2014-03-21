@@ -7,34 +7,37 @@ use Google::API::Drive;
 use Fuse;
 use POSIX qw/ENOENT EISDIR EINVAL EOPNOTSUPP EIO O_WRONLY/;
 use Date::Parse qw/str2time/;
-use Getopt::Abridged;
+use Getopt::Long;
+use Data::Printer;
 
 
-my $options = Getopt::Abridged->new(
-	'd|debug=0',
-	'm|mountpoint=s',
-	'l|label=s',
-	-positional => ['mountpoint'],
-)->process(\@ARGV) or exit;
+my %options = ( debug=>0 );
+Getopt::Long::Configure("bundling");
+GetOptions(\%options,
+	'debug|d',
+	'label|l=s',
+) or exit;
+$options{'mountpoint'} = $ARGV[0];
+p %options;
 
-die "No mountpoint specified" if !$options->{'mountpoint'};
-die "Mountpoint '".$options->{'mountpoint'}."' does not exist" if !-d $options->{'mountpoint'};
-
-fork and exit unless $options->{'debug'};
+die "No mountpoint specified" if !$options{'mountpoint'};
+die "Mountpoint '".$options{'mountpoint'}."' does not exist" if !-d $options{'mountpoint'};
 
 my $drive = Google::API::Drive->new(
-	debug => $options->{'debug'},
-	label => $options->{'label'},
+	debug => $options{'debug'},
+	label => $options{'label'},
 	config_dir => undef, # Defaults to ~/.gdfs
 );
+
+fork and exit unless $options{'debug'};
 
 my $fsname = 'google-drive';
 $fsname .= ":".$drive->label() if $drive->label();
 
 Fuse::main(
-	mountpoint => $options->{'mountpoint'},
+	mountpoint => $options{'mountpoint'},
 	mountopts => 'fsname='.$fsname.',subtype=gdfs',
-	debug => $options->{'debug'},
+	debug => $options{'debug'},
 
 	getdir => \&getdir,
 	getattr => \&getattr,

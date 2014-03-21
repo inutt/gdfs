@@ -295,15 +295,16 @@ sub get_remote_changes
 	{
 		$changes = $this->request(
 										'drive/v2/changes',
-										startChangeId => $last_seen_change,
+										startChangeId => $last_seen_change+1,
 										'pageToken' => $changes->{'nextPageToken'},
 										#fields => 'items('.$file_metadata_fields.'),nextPageToken,nextLink',
-										fields => 'items(id,fileId,deleted,file('.$file_metadata_fields.')),nextPageToken,nextLink',
+										fields => 'items(id,fileId,deleted,file('.$file_metadata_fields.',labels(trashed))),nextPageToken,nextLink',
 									);
 		foreach my $change (@{$changes->{'items'}})
 		{
-			if ($change->{'file'})    { $this->cache->set_metadata($change->{'file'});   print STDERR "Remote change: metadata change for ID ".$change->{'fileId'}."\n" if $this->debug; };
-			if ($change->{'deleted'}) { $this->cache->del_metadata($change->{'fileId'}); print STDERR "Remote change: ID ".$change->{'fileId'}." deleted\n" if $this->debug; };
+			if ($change->{'file'})    { $this->cache->set_metadata($change->{'file'});   print STDERR "Remote change ".$change->{'id'}.": metadata change for ID ".$change->{'fileId'}."\n" if $this->debug; };
+			if ($change->{'file'}->{'labels'}->{'trashed'} eq "true") { $this->cache->del_metadata($change->{'fileId'}); print STDERR "Remote change ".$change->{'id'}.": ID ".$change->{'fileId'}." trashed\n" if $this->debug; };
+			use Data::Dumper; print Dumper $change;
 
 			$last_seen_change = $change->{'id'};
 		};
@@ -326,12 +327,12 @@ sub fork_poller
 		$0 .= " [change poller]";
 		while(1)
 		{
-			sleep $this->{'poll_interval'};
 			my $ppid = getppid();
 			exit(0) if $ppid == 1; # Exit the polling subprocess if the parent exits and didn't tell us
 #			kill 'TSTP',$ppid; # Temporarily suspend the main process to avoid the possibility of both processing updating things simultaneously
 			$this->get_remote_changes();
 #			kill 'CONT',$ppid; # Resume the main process
+			sleep $this->{'poll_interval'};
 		};
 	}
 	else
@@ -351,8 +352,5 @@ sub DESTROY
 		while(wait() > -1) { sleep 1 };
 	};
 };
-
-1;
-
 
 1;

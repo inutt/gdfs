@@ -63,7 +63,7 @@ sub load_config
 sub save_config
 {
 	my $this = shift;
-	# Should probably use encode_json() here to handle UTG-8 properly, but that doesn't support pretty printing without using it in OO-form
+	# Should probably use encode_json() here to handle UTF-8 properly, but that doesn't support pretty printing without using it in OO-form
 	write_file( $this->{'config_dir'}."/auth", to_json($this->{'cfg'},{pretty=>1}) );
 	chmod 0600, $this->{'config_dir'}."/auth";
 };
